@@ -19,27 +19,34 @@ This downloads ~110MB of parquet files to `~/.gngram-counter/data/`.
 ## Usage
 
 ```python
+from gngram_counter import exists, frequency, batch_frequency
+
+# Check if a word exists
+exists("example")  # True
+exists("xyznotaword")  # False
+
+# Get frequency data for a word
+freq = frequency("example")
+# {'peak_tf': 1990, 'peak_df': 1990, 'sum_tf': 12345, 'sum_df': 9876}
+
+# Batch lookup for multiple words
+results = batch_frequency(["the", "example", "xyznotaword"])
+# {'the': {...}, 'example': {...}, 'xyznotaword': None}
+```
+
+### Low-level API
+
+For direct parquet access:
+
+```python
 from gngram_counter import get_hash_file, is_data_installed
 import polars as pl
 import hashlib
 
-# Check if data is installed
-if not is_data_installed():
-    print("Run: python -m gngram_counter.download_data")
-
-# Lookup a word
 word = "example"
 h = hashlib.md5(word.encode()).hexdigest()
-prefix, suffix = h[:2], h[2:]
-
-df = pl.read_parquet(get_hash_file(prefix))
-row = df.filter(pl.col("hash") == suffix)
-
-if len(row):
-    print(f"peak_tf_decade: {row['peak_tf'][0]}")
-    print(f"peak_df_decade: {row['peak_df'][0]}")
-    print(f"sum_tf: {row['sum_tf'][0]}")
-    print(f"sum_df: {row['sum_df'][0]}")
+df = pl.read_parquet(get_hash_file(h[:2]))
+row = df.filter(pl.col("hash") == h[2:])
 ```
 
 ## Data Schema

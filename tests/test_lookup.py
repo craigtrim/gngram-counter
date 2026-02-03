@@ -76,7 +76,8 @@ class TestExists:
         assert exists("xyznotarealword123") is False
 
     def test_exists_gibberish(self):
-        assert exists("asdfghjkl") is False
+        # Use a truly random string unlikely to be in corpus
+        assert exists("qzxjkvwpy") is False
 
     def test_exists_empty_string(self):
         assert exists("") is False

@@ -1,20 +1,60 @@
 [tool.poetry]
-name = "gngram-counter"
-version = "0.1.0"
-description = ""
-authors = ["Craig Trim <ctrim@maryville.edu>"]
+name = "gngram-lookup"
+packages = [{include = "gngram_counter"}]
+version = "0.2.0"
+description = "Static Hash-Based Lookup for Google Ngram Frequencies"
+authors = ["Craig Trim <craigtrim@gmail.com>"]
+maintainers = ["Craig Trim <craigtrim@gmail.com>"]
 readme = "README.md"
+license = "Proprietary"
 exclude = ["parquet-hash/", "builder/"]
+
+keywords = [
+  "ngram",
+  "google-ngram",
+  "nlp",
+  "natural-language-processing",
+  "frequency",
+  "linguistics",
+]
+
+repository = "https://github.com/craigtrim/gngram-lookup"
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Text Processing :: Linguistic",
+  "Natural Language :: English",
+  "Operating System :: OS Independent",
+]
+
+[tool.poetry.scripts]
+gngram-exists = "gngram_counter.cli:gngram_exists"
+gngram-freq = "gngram_counter.cli:gngram_freq"
+
+[tool.poetry.build]
+generate-setup-file = true
 
 [tool.poetry.dependencies]
 python = "^3.11"
 polars = "^1.0"
 pyarrow = "^18.0"
 
-[tool.poetry.scripts]
-gngram-exists = "gngram_counter.cli:gngram_exists"
-gngram-freq = "gngram_counter.cli:gngram_freq"
+[tool.poetry.dev-dependencies]
+autopep8 = "*"
+ruff = "*"
+pre-commit = "^2.20.0"
+pytest = "*"
 
 [build-system]
-requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+ignore = ["F403", "F405"]

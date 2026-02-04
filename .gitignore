@@ -38,3 +38,4 @@ htmlcov/
 # Data files (too large for git, distributed via GitHub releases)
 parquet-hash/
 parquet-hash.tar.gz
+config.sh

@@ -40,3 +40,5 @@ parquet-hash/
 parquet-hash.tar.gz
 config.sh
 .claude
+pypi.key
+builder/

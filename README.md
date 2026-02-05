@@ -4,7 +4,7 @@
 [![Downloads](https://pepy.tech/badge/gngram-lookup)](https://pepy.tech/project/gngram-lookup)
 [![Downloads/Month](https://pepy.tech/badge/gngram-lookup/month)](https://pepy.tech/project/gngram-lookup)
 [![Tests](https://img.shields.io/badge/tests-131-brightgreen)](https://github.com/craigtrim/gngram-lookup/tree/main/tests)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 
 Word frequency from 500 years of books. O(1) lookup. 5 million words.
 

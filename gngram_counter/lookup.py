@@ -9,6 +9,8 @@ contains pure alphabetic words, so contractions and their suffix parts
 (n't, 'll, etc.) are absent — but the stems are present.
 """
 
+from __future__ import annotations
+
 import hashlib
 from functools import lru_cache
 from typing import TypedDict

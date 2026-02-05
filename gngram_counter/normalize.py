@@ -6,6 +6,8 @@ transformations to ensure consistent matching against the ngram corpus.
 Ported from bnc-lookup normalize.py.
 """
 
+from __future__ import annotations
+
 # Unicode characters that should normalize to ASCII apostrophe (U+0027)
 # Ordered by likelihood of occurrence in English text
 APOSTROPHE_VARIANTS = (

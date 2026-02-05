@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "gngram-lookup"
 packages = [{include = "gngram_counter"}]
-version = "0.2.2"
+version = "0.2.3"
 description = "Static Hash-Based Lookup for Google Ngram Frequencies"
 authors = ["Craig Trim <craigtrim@gmail.com>"]
 maintainers = ["Craig Trim <craigtrim@gmail.com>"]
@@ -39,7 +39,7 @@ gngram-freq = "gngram_counter.cli:gngram_freq"
 generate-setup-file = true
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.9"
 polars = "^1.0"
 pyarrow = "^18.0"
 

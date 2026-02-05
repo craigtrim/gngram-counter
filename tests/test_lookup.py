@@ -18,7 +18,7 @@ from gngram_counter.lookup import (
     _split_contraction,
     _split_hyphenated,
 )
-from gngram_counter.normalize import normalize, normalize_apostrophes
+from gngram_counter.normalize import normalize, normalize_apostrophes, strip_accents
 
 
 class TestDataInstallation:
@@ -234,12 +234,12 @@ class TestBatchFrequency:
 class TestEdgeCases:
     """Tests for edge cases and unusual inputs."""
 
-    def test_unicode_word(self):
-        # Unicode characters - may or may not exist
-        result = exists("café")
-        assert isinstance(result, bool)
-        freq = frequency("café")
-        assert freq is None or isinstance(freq, dict)
+    def test_accented_word_resolves_to_ascii(self):
+        # Accented words should resolve via accent stripping
+        assert exists("café") is True
+        assert exists("protégé") is True
+        assert exists("outré") is True
+        assert exists("phaéton") is True
 
     def test_very_long_word(self):
         long_word = "a" * 1000
@@ -364,6 +364,35 @@ class TestNormalize:
 
     def test_normalize_apostrophes_empty(self):
         assert normalize_apostrophes("") == ""
+
+    # --- Accent stripping ---
+
+    def test_strip_accents_acute(self):
+        assert strip_accents("protégé") == "protege"
+
+    def test_strip_accents_mixed(self):
+        assert strip_accents("phaéton") == "phaeton"
+
+    def test_strip_accents_grave(self):
+        assert strip_accents("outré") == "outre"
+
+    def test_strip_accents_no_change(self):
+        assert strip_accents("hello") == "hello"
+
+    def test_strip_accents_empty(self):
+        assert strip_accents("") == ""
+
+    def test_strip_accents_preserves_apostrophe(self):
+        # ASCII apostrophe should survive accent stripping
+        assert strip_accents("don't") == "don't"
+
+    def test_normalize_accent_full_pipeline(self):
+        # Accent + uppercase + whitespace
+        assert normalize("  Protégé  ") == "protege"
+
+    def test_normalize_accent_with_apostrophe(self):
+        # Accent + curly apostrophe
+        assert normalize("café\u2019s") == "cafe's"
 
 
 class TestSplitContraction:

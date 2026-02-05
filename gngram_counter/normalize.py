@@ -1,12 +1,13 @@
 """Text normalization utilities for gngram-counter.
 
-Handles normalization of Unicode apostrophe variants and other text
-transformations to ensure consistent matching against the ngram corpus.
-
-Ported from bnc-lookup normalize.py.
+Handles normalization of Unicode apostrophe variants, accented characters,
+and other text transformations to ensure consistent matching against the
+ngram corpus (which is ASCII-only).
 """
 
 from __future__ import annotations
+
+import unicodedata
 
 # Unicode characters that should normalize to ASCII apostrophe (U+0027)
 # Ordered by likelihood of occurrence in English text
@@ -42,9 +43,20 @@ def normalize_apostrophes(text: str) -> str:
     return text.translate(_APOSTROPHE_TABLE)
 
 
+def strip_accents(text: str) -> str:
+    """Strip Unicode accents, preserving ASCII characters.
+
+    Uses NFKD decomposition to separate base characters from combining
+    marks, then drops the marks. E.g., "protégé" -> "protege".
+    """
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+
+
 def normalize(text: str) -> str:
     """Normalize text for ngram lookup.
 
-    Applies: apostrophe variant conversion, lowercase, strip whitespace.
+    Applies: apostrophe normalization, accent stripping, lowercase, strip whitespace.
     """
-    return normalize_apostrophes(text).lower().strip()
+    text = normalize_apostrophes(text)
+    text = strip_accents(text)
+    return text.lower().strip()

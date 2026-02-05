@@ -1,12 +1,12 @@
 """
 High-level lookup API for gngram-counter.
 
-Provides simple functions for word frequency lookups similar to bnc-lookup.
+The ngram corpus contains only pure alphabetic words, so contractions,
+possessives, and hyphenated compounds are absent. Fallback strategies:
 
-Includes contraction fallback: if a contraction like "don't" is not found
-directly, the stem ("do") is looked up instead. The ngram corpus only
-contains pure alphabetic words, so contractions and their suffix parts
-(n't, 'll, etc.) are absent — but the stems are present.
+1. Contractions: "don't" -> stem "do" looked up
+2. Possessives: "ship's" -> stem "ship" looked up
+3. Hyphenated: "quarter-deck" -> all parts checked ("quarter", "deck")
 """
 
 from __future__ import annotations
@@ -33,21 +33,6 @@ class FrequencyData(TypedDict):
 # Contraction suffixes stored as separate tokens in the ngram corpus
 # Order matters: longer suffixes must be checked before shorter ones
 CONTRACTION_SUFFIXES = ("n't", "'ll", "'re", "'ve", "'m", "'d")
-
-# Specific stems that form 's contractions (where 's = "is" or "has").
-# NOT generalized — 's is ambiguous with possessive, so only known
-# contraction stems are listed here. Ported from bnc-lookup.
-S_CONTRACTION_STEMS = frozenset({
-    # Pronouns (unambiguously 's = "is" or "has", never possessive)
-    'it', 'he', 'she', 'that', 'what', 'who',
-    # Adverbs / demonstratives
-    'where', 'how', 'here', 'there',
-    # "let's" = "let us"
-    'let',
-    # Indefinite pronouns
-    'somebody', 'everybody', 'everyone', 'nobody',
-    'anywhere', 'nowhere',
-})
 
 
 @lru_cache(maxsize=256)
@@ -83,14 +68,14 @@ def _lookup_frequency(word: str) -> FrequencyData | None:
 
 
 def _split_contraction(word: str) -> tuple[str, str] | None:
-    """Split a contraction into its component parts if possible.
+    """Split a contraction or possessive into (stem, suffix).
 
-    The ngram corpus tokenizes contractions separately (e.g., "we'll" -> "we" + "'ll").
-    This function reverses that split for fallback lookup.
+    Handles standard contractions (n't, 'll, etc.) and possessives ('s).
+    The ngram corpus only has pure alpha words, so both contractions and
+    possessives need stem-based fallback.
 
     Returns:
-        Tuple of (stem, suffix) if the word matches a contraction pattern,
-        or None if no contraction pattern matches.
+        Tuple of (stem, suffix) or None if no pattern matches.
     """
     for suffix in CONTRACTION_SUFFIXES:
         if word.endswith(suffix):
@@ -98,22 +83,37 @@ def _split_contraction(word: str) -> tuple[str, str] | None:
             if stem:
                 return (stem, suffix)
 
-    # Specific 's contractions from curated allowlist (not possessives)
+    # Any 's — covers both contractions ("it's") and possessives ("ship's")
     if word.endswith("'s"):
         stem = word[:-2]
-        if stem in S_CONTRACTION_STEMS:
+        if stem:
             return (stem, "'s")
 
     return None
 
 
+def _split_hyphenated(word: str) -> list[str] | None:
+    """Split a hyphenated word into its component parts.
+
+    Returns:
+        List of parts if the word contains hyphens and has at least 2
+        non-empty parts, or None otherwise.
+    """
+    if "-" not in word:
+        return None
+    parts = [p for p in word.split("-") if p]
+    if len(parts) < 2:
+        return None
+    return parts
+
+
 def exists(word: str) -> bool:
     """Check if a word exists in the ngram data.
 
-    Performs case-insensitive lookup with automatic fallbacks:
-    1. Direct lookup of the normalized word
-    2. Contraction fallback: if word is a contraction, check if both
-       components exist (e.g., "don't" -> "do" + "n't")
+    Fallback chain:
+    1. Direct lookup
+    2. Contraction/possessive: check stem ("don't" -> "do", "ship's" -> "ship")
+    3. Hyphenated: check all parts ("quarter-deck" -> "quarter" + "deck")
 
     Args:
         word: The word to check (case-insensitive)
@@ -134,11 +134,17 @@ def exists(word: str) -> bool:
     if _lookup_frequency(word) is not None:
         return True
 
-    # Contraction fallback: check if the stem exists
+    # Contraction/possessive fallback
     parts = _split_contraction(word)
     if parts:
         stem, _ = parts
         if _lookup_frequency(stem) is not None:
+            return True
+
+    # Hyphenated fallback: all parts must exist
+    hyp_parts = _split_hyphenated(word)
+    if hyp_parts:
+        if all(_lookup_frequency(p) is not None for p in hyp_parts):
             return True
 
     return False
@@ -147,8 +153,10 @@ def exists(word: str) -> bool:
 def frequency(word: str) -> FrequencyData | None:
     """Get frequency data for a word.
 
-    Performs case-insensitive lookup with contraction fallback.
-    For contractions, returns the stem's frequency data.
+    Fallback chain:
+    1. Direct lookup
+    2. Contraction/possessive: return stem's frequency
+    3. Hyphenated: return first component's frequency
 
     Args:
         word: The word to look up (case-insensitive)
@@ -170,13 +178,19 @@ def frequency(word: str) -> FrequencyData | None:
     if result is not None:
         return result
 
-    # Contraction fallback: return the stem's frequency
+    # Contraction/possessive fallback: return the stem's frequency
     parts = _split_contraction(word)
     if parts:
         stem, _ = parts
         stem_freq = _lookup_frequency(stem)
         if stem_freq is not None:
             return stem_freq
+
+    # Hyphenated fallback: return first component's frequency
+    hyp_parts = _split_hyphenated(word)
+    if hyp_parts:
+        if all(_lookup_frequency(p) is not None for p in hyp_parts):
+            return _lookup_frequency(hyp_parts[0])
 
     return None
 
@@ -200,7 +214,7 @@ def batch_frequency(words: list[str]) -> dict[str, FrequencyData | None]:
 
     # Group words by bucket prefix for efficient batch lookups
     by_prefix: dict[str, list[tuple[str, str, str]]] = {}
-    contraction_words: list[str] = []
+    fallback_words: list[str] = []
 
     for word in words:
         normalized = normalize(word)
@@ -229,18 +243,26 @@ def batch_frequency(words: list[str]) -> dict[str, FrequencyData | None]:
                     sum_df=row["sum_df"],
                 )
             else:
-                # Mark for contraction fallback
                 results[word] = None
-                contraction_words.append(word)
+                fallback_words.append(word)
 
-    # Contraction fallback for words not found directly
-    for word in contraction_words:
+    # Fallback for words not found directly
+    for word in fallback_words:
         normalized = normalize(word)
+
+        # Contraction/possessive fallback
         parts = _split_contraction(normalized)
         if parts:
             stem, _ = parts
             stem_freq = _lookup_frequency(stem)
             if stem_freq is not None:
                 results[word] = stem_freq
+                continue
+
+        # Hyphenated fallback
+        hyp_parts = _split_hyphenated(normalized)
+        if hyp_parts:
+            if all(_lookup_frequency(p) is not None for p in hyp_parts):
+                results[word] = _lookup_frequency(hyp_parts[0])
 
     return results

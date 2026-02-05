@@ -12,7 +12,7 @@ Word frequency from 500 years of books. O(1) lookup. 5 million words.
 
 ```bash
 pip install gngram-lookup
-python -m gngram_lookup.download_data
+python -m gngram_lookup.download_data   # ~110 MB, takes a few seconds
 ```
 
 ## Python

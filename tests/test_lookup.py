@@ -14,9 +14,9 @@ from gngram_counter import (
     is_data_installed,
 )
 from gngram_counter.lookup import (
-    S_CONTRACTION_STEMS,
     _hash_word,
     _split_contraction,
+    _split_hyphenated,
 )
 from gngram_counter.normalize import normalize, normalize_apostrophes
 
@@ -254,9 +254,8 @@ class TestEdgeCases:
         assert result_a or result_i
 
     def test_hyphenated_word(self):
-        # Hyphenated words may or may not be in corpus
-        result = exists("self-aware")
-        assert isinstance(result, bool)
+        # Hyphenated words with valid parts resolve via fallback
+        assert exists("self-aware") is True
 
     def test_word_with_apostrophe(self):
         # Contractions resolve via fallback (split into components)
@@ -388,19 +387,20 @@ class TestSplitContraction:
     def test_split_d(self):
         assert _split_contraction("i'd") == ("i", "'d")
 
-    def test_split_s_all_allowlist_stems(self):
-        # Every stem in S_CONTRACTION_STEMS should split
-        for stem in S_CONTRACTION_STEMS:
+    def test_split_s_pronoun_contractions(self):
+        for stem in ("it", "he", "she", "that", "what", "who", "where", "let"):
             word = f"{stem}'s"
             result = _split_contraction(word)
             assert result == (stem, "'s"), f"Failed for {word!r}"
 
-    def test_split_s_possessive_rejected(self):
-        # Possessives should NOT split
-        for possessive in ("dog's", "john's", "cat's", "king's", "mother's"):
-            assert _split_contraction(possessive) is None, (
-                f"{possessive!r} should not split"
-            )
+    def test_split_s_possessives(self):
+        # Possessives now split (generalized 's fallback)
+        for word, expected_stem in [
+            ("dog's", "dog"), ("king's", "king"), ("ship's", "ship"),
+            ("captain's", "captain"), ("mother's", "mother"),
+        ]:
+            result = _split_contraction(word)
+            assert result == (expected_stem, "'s"), f"Failed for {word!r}"
 
     def test_split_regular_word(self):
         assert _split_contraction("hello") is None
@@ -478,11 +478,11 @@ class TestContractionFallback:
     def test_exists_lets(self):
         assert exists("let's") is True
 
-    def test_exists_possessive_not_split(self):
-        # Possessives should NOT be split — "dog's" stays as-is
-        # (will be False since "dog's" isn't in the corpus directly)
-        result = exists("dog's")
-        assert isinstance(result, bool)
+    def test_exists_possessive_resolves_via_stem(self):
+        # Possessives now resolve via stem fallback
+        assert exists("dog's") is True
+        assert exists("king's") is True
+        assert exists("ship's") is True
 
     # --- Case-insensitive contractions ---
 
@@ -540,9 +540,11 @@ class TestContractionFallback:
         assert isinstance(result["peak_tf"], int)
         assert isinstance(result["sum_tf"], int)
 
-    def test_frequency_possessive_returns_none(self):
-        # "dog's" is not in allowlist, not a recognized contraction
-        assert frequency("dog's") is None
+    def test_frequency_possessive_returns_stem_data(self):
+        # Possessives now return the stem's frequency
+        result = frequency("dog's")
+        assert result is not None
+        assert result == frequency("dog")
 
     # --- Consistency: contraction frequency == stem frequency ---
 
@@ -604,3 +606,130 @@ class TestContractionFallback:
             assert batch_result[word] == frequency(word), (
                 f"batch != individual for {word!r}"
             )
+
+
+class TestSplitHyphenated:
+    """Tests for _split_hyphenated."""
+
+    def test_split_simple(self):
+        assert _split_hyphenated("quarter-deck") == ["quarter", "deck"]
+
+    def test_split_three_parts(self):
+        assert _split_hyphenated("man-of-war") == ["man", "of", "war"]
+
+    def test_split_no_hyphen(self):
+        assert _split_hyphenated("hello") is None
+
+    def test_split_empty(self):
+        assert _split_hyphenated("") is None
+
+    def test_split_lone_hyphen(self):
+        assert _split_hyphenated("-") is None
+
+    def test_split_leading_hyphen(self):
+        # "-foo" has only one non-empty part
+        assert _split_hyphenated("-foo") is None
+
+    def test_split_trailing_hyphen(self):
+        assert _split_hyphenated("foo-") is None
+
+    def test_split_double_hyphen(self):
+        # "foo--bar" should still produce ["foo", "bar"]
+        assert _split_hyphenated("foo--bar") == ["foo", "bar"]
+
+
+class TestPossessiveFallback:
+    """Tests for possessive fallback in exists() and frequency()."""
+
+    def test_exists_common_possessives(self):
+        for word in ("ship's", "king's", "captain's", "admiral's"):
+            assert exists(word) is True, f"{word!r} should exist via stem"
+
+    def test_exists_possessive_case_insensitive(self):
+        assert exists("KING'S") is True
+        assert exists("Ship's") is True
+
+    def test_exists_possessive_curly_apostrophe(self):
+        assert exists("ship\u2019s") is True
+
+    def test_exists_nonsense_possessive(self):
+        assert exists("xyznotaword's") is False
+
+    def test_frequency_possessive_equals_stem(self):
+        assert frequency("ship's") == frequency("ship")
+        assert frequency("king's") == frequency("king")
+
+    def test_frequency_nonsense_possessive(self):
+        assert frequency("xyznotaword's") is None
+
+    def test_batch_possessives(self):
+        result = batch_frequency(["ship's", "king's", "xyznotaword's"])
+        assert result["ship's"] is not None
+        assert result["king's"] is not None
+        assert result["xyznotaword's"] is None
+
+    def test_batch_possessive_matches_individual(self):
+        words = ["ship's", "captain's", "dog's"]
+        batch_result = batch_frequency(words)
+        for word in words:
+            assert batch_result[word] == frequency(word), (
+                f"batch != individual for {word!r}"
+            )
+
+
+class TestHyphenatedFallback:
+    """Tests for hyphenated word fallback in exists() and frequency()."""
+
+    def test_exists_common_hyphenated(self):
+        for word in ("quarter-deck", "court-martial", "north-west", "twenty-five"):
+            assert exists(word) is True, f"{word!r} should exist via parts"
+
+    def test_exists_three_part(self):
+        assert exists("man-of-war") is True
+
+    def test_exists_hyphenated_case_insensitive(self):
+        assert exists("QUARTER-DECK") is True
+        assert exists("North-West") is True
+
+    def test_exists_hyphenated_one_bad_part(self):
+        # One component is nonsense — should be False
+        assert exists("quarter-xyznotaword") is False
+
+    def test_exists_hyphenated_all_bad_parts(self):
+        assert exists("xyzfoo-xyzbar") is False
+
+    def test_frequency_hyphenated_returns_first_part(self):
+        result = frequency("quarter-deck")
+        assert result is not None
+        assert result == frequency("quarter")
+
+    def test_frequency_hyphenated_three_part(self):
+        result = frequency("man-of-war")
+        assert result is not None
+        assert result == frequency("man")
+
+    def test_frequency_hyphenated_bad_part_returns_none(self):
+        assert frequency("quarter-xyznotaword") is None
+
+    def test_batch_hyphenated(self):
+        result = batch_frequency(["quarter-deck", "north-west", "xyzfoo-xyzbar"])
+        assert result["quarter-deck"] is not None
+        assert result["north-west"] is not None
+        assert result["xyzfoo-xyzbar"] is None
+
+    def test_batch_hyphenated_matches_individual(self):
+        words = ["quarter-deck", "court-martial", "man-of-war"]
+        batch_result = batch_frequency(words)
+        for word in words:
+            assert batch_result[word] == frequency(word), (
+                f"batch != individual for {word!r}"
+            )
+
+    def test_exists_frequency_agree_for_hyphenated(self):
+        for word in ("quarter-deck", "north-west", "xyzfoo-xyzbar"):
+            e = exists(word)
+            f = frequency(word)
+            if e:
+                assert f is not None, f"exists=True but frequency=None for {word!r}"
+            else:
+                assert f is None, f"exists=False but frequency!=None for {word!r}"
